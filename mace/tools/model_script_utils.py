@@ -119,7 +119,7 @@ def configure_model(
             max_ell=args.max_ell,
             interaction_cls=modules.interaction_classes[args.interaction],
             num_interactions=args.num_interactions,
-            num_elements=len(z_table),
+            num_elements=args.num_node_attrs,
             hidden_irreps=o3.Irreps(args.hidden_irreps),
             atomic_energies=atomic_energies,
             avg_num_neighbors=args.avg_num_neighbors,

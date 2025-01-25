@@ -50,6 +50,7 @@ class HDF5Dataset(Dataset):
         subgrp = grp["config_" + str(config_index)]
         config = Configuration(
             atomic_numbers=subgrp["atomic_numbers"][()],
+            node_attrs=subgrp["node_attrs"][()],
             positions=subgrp["positions"][()],
             energy=unpack_value(subgrp["energy"][()]),
             forces=unpack_value(subgrp["forces"][()]),

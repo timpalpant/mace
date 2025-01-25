@@ -16,7 +16,6 @@ from mace.modules.radial import ZBLBasis
 from mace.tools.scatter import scatter_sum
 
 from .blocks import (
-    AtomicEnergiesBlock,
     EquivariantProductBasisBlock,
     InteractionBlock,
     LinearDipoleReadoutBlock,
@@ -108,8 +107,6 @@ class MACE(torch.nn.Module):
         if radial_MLP is None:
             radial_MLP = [64, 64, 64]
         # Interactions and readout
-        self.atomic_energies_fn = AtomicEnergiesBlock(atomic_energies)
-
         inter = interaction_cls_first(
             node_attrs_irreps=node_attr_irreps,
             node_feats_irreps=node_feats_irreps,
@@ -231,13 +228,6 @@ class MACE(torch.nn.Module):
                 batch=data["batch"],
             )
 
-        # Atomic energies
-        node_e0 = self.atomic_energies_fn(data["node_attrs"])[
-            num_atoms_arange, node_heads
-        ]
-        e0 = scatter_sum(
-            src=node_e0, index=data["batch"], dim=0, dim_size=num_graphs
-        )  # [n_graphs, n_heads]
         # Embeddings
         node_feats = self.node_embedding(data["node_attrs"])
         vectors, lengths = get_edge_vectors_and_lengths(
@@ -249,6 +239,9 @@ class MACE(torch.nn.Module):
         edge_feats = self.radial_embedding(
             lengths, data["node_attrs"], data["edge_index"], self.atomic_numbers
         )
+
+        energies = []
+        node_energies_list = []
         if hasattr(self, "pair_repulsion"):
             pair_node_energy = self.pair_repulsion_fn(
                 lengths, data["node_attrs"], data["edge_index"], self.atomic_numbers
@@ -256,13 +249,10 @@ class MACE(torch.nn.Module):
             pair_energy = scatter_sum(
                 src=pair_node_energy, index=data["batch"], dim=-1, dim_size=num_graphs
             )  # [n_graphs,]
-        else:
-            pair_node_energy = torch.zeros_like(node_e0)
-            pair_energy = torch.zeros_like(e0)
+            energies.append(pair_energy)
+            node_energies_list.append(pair_node_energy)
 
         # Interactions
-        energies = [e0, pair_energy]
-        node_energies_list = [node_e0, pair_node_energy]
         node_feats_list = []
         for interaction, product, readout in zip(
             self.interactions, self.products, self.readouts
@@ -378,14 +368,6 @@ class ScaleShiftMACE(MACE):
                 batch=data["batch"],
             )
 
-        # Atomic energies
-        node_e0 = self.atomic_energies_fn(data["node_attrs"])[
-            num_atoms_arange, node_heads
-        ]
-        e0 = scatter_sum(
-            src=node_e0, index=data["batch"], dim=0, dim_size=num_graphs
-        )  # [n_graphs, num_heads]
-
         # Embeddings
         node_feats = self.node_embedding(data["node_attrs"])
         vectors, lengths = get_edge_vectors_and_lengths(
@@ -397,14 +379,13 @@ class ScaleShiftMACE(MACE):
         edge_feats = self.radial_embedding(
             lengths, data["node_attrs"], data["edge_index"], self.atomic_numbers
         )
+        node_es_list = []
         if hasattr(self, "pair_repulsion"):
             pair_node_energy = self.pair_repulsion_fn(
                 lengths, data["node_attrs"], data["edge_index"], self.atomic_numbers
             )
-        else:
-            pair_node_energy = torch.zeros_like(node_e0)
+            node_es_list.append(pair_node_energy)
         # Interactions
-        node_es_list = [pair_node_energy]
         node_feats_list = []
         for interaction, product, readout in zip(
             self.interactions, self.products, self.readouts
@@ -438,8 +419,8 @@ class ScaleShiftMACE(MACE):
         )  # [n_graphs,]
 
         # Add E_0 and (scaled) interaction energy
-        total_energy = e0 + inter_e
-        node_energy = node_e0 + node_inter_es
+        total_energy = inter_e
+        node_energy = node_inter_es
         forces, virials, stress, hessian = get_outputs(
             energy=inter_e,
             positions=data["positions"],
@@ -506,9 +487,6 @@ class BOTNet(torch.nn.Module):
             sh_irreps, normalize=True, normalization="component"
         )
 
-        # Interactions and readouts
-        self.atomic_energies_fn = AtomicEnergiesBlock(atomic_energies)
-
         self.interactions = torch.nn.ModuleList()
         self.readouts = torch.nn.ModuleList()
 
@@ -545,14 +523,6 @@ class BOTNet(torch.nn.Module):
         data.positions.requires_grad = True
         num_atoms_arange = torch.arange(data.positions.shape[0])
 
-        # Atomic energies
-        node_e0 = self.atomic_energies_fn(data["node_attrs"])[
-            num_atoms_arange, data["head"][data["batch"]]
-        ]
-        e0 = scatter_sum(
-            src=node_e0, index=data.batch, dim=-1, dim_size=data.num_graphs
-        )  # [n_graphs, n_heads]
-
         # Embeddings
         node_feats = self.node_embedding(data.node_attrs)
         vectors, lengths = get_edge_vectors_and_lengths(
@@ -564,7 +534,7 @@ class BOTNet(torch.nn.Module):
         )
 
         # Interactions
-        energies = [e0]
+        energies = []
         for interaction, readout in zip(self.interactions, self.readouts):
             node_feats = interaction(
                 node_attrs=data.node_attrs,
@@ -610,13 +580,6 @@ class ScaleShiftBOTNet(BOTNet):
         # Setup
         data.positions.requires_grad = True
         num_atoms_arange = torch.arange(data.positions.shape[0])
-        # Atomic energies
-        node_e0 = self.atomic_energies_fn(data["node_attrs"])[
-            num_atoms_arange, data["head"][data["batch"]]
-        ]
-        e0 = scatter_sum(
-            src=node_e0, index=data.batch, dim=-1, dim_size=data.num_graphs
-        )  # [n_graphs,]
 
         # Embeddings
         node_feats = self.node_embedding(data.node_attrs)
@@ -653,7 +616,7 @@ class ScaleShiftBOTNet(BOTNet):
         )  # [n_graphs,]
 
         # Add E_0 and (scaled) interaction energy
-        total_e = e0 + inter_e
+        total_e = inter_e
 
         output = {
             "energy": total_e,
@@ -921,9 +884,6 @@ class EnergyDipolesMACE(torch.nn.Module):
         )
         if radial_MLP is None:
             radial_MLP = [64, 64, 64]
-        # Interactions and readouts
-        self.atomic_energies_fn = AtomicEnergiesBlock(atomic_energies)
-
         inter = interaction_cls_first(
             node_attrs_irreps=node_attr_irreps,
             node_feats_irreps=node_feats_irreps,
@@ -1027,14 +987,6 @@ class EnergyDipolesMACE(torch.nn.Module):
                 batch=data["batch"],
             )
 
-        # Atomic energies
-        node_e0 = self.atomic_energies_fn(data["node_attrs"])[
-            num_atoms_arange, data["head"][data["batch"]]
-        ]
-        e0 = scatter_sum(
-            src=node_e0, index=data["batch"], dim=-1, dim_size=num_graphs
-        )  # [n_graphs,]
-
         # Embeddings
         node_feats = self.node_embedding(data["node_attrs"])
         vectors, lengths = get_edge_vectors_and_lengths(
@@ -1048,8 +1000,8 @@ class EnergyDipolesMACE(torch.nn.Module):
         )
 
         # Interactions
-        energies = [e0]
-        node_energies_list = [node_e0]
+        energies = []
+        node_energies_list = []
         dipoles = []
         for interaction, product, readout in zip(
             self.interactions, self.products, self.readouts

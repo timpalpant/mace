@@ -10,8 +10,6 @@ import torch.utils.data
 
 from mace.tools import (
     AtomicNumberTable,
-    atomic_numbers_to_indices,
-    to_one_hot,
     torch_geometric,
     voigt_to_matrix,
 )
@@ -122,11 +120,6 @@ class AtomicData(torch_geometric.data.Data):
         edge_index, shifts, unit_shifts, cell = get_neighborhood(
             positions=config.positions, cutoff=cutoff, pbc=config.pbc, cell=config.cell
         )
-        indices = atomic_numbers_to_indices(config.atomic_numbers, z_table=z_table)
-        one_hot = to_one_hot(
-            torch.tensor(indices, dtype=torch.long).unsqueeze(-1),
-            num_classes=len(z_table),
-        )
         try:
             head = torch.tensor(heads.index(config.head), dtype=torch.long)
         except ValueError:
@@ -211,7 +204,7 @@ class AtomicData(torch_geometric.data.Data):
             shifts=torch.tensor(shifts, dtype=torch.get_default_dtype()),
             unit_shifts=torch.tensor(unit_shifts, dtype=torch.get_default_dtype()),
             cell=cell,
-            node_attrs=one_hot,
+            node_attrs=torch.tensor(config.node_attrs, dtype=torch.get_default_dtype()),
             weight=weight,
             head=head,
             energy_weight=energy_weight,

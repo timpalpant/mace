@@ -31,6 +31,7 @@ DEFAULT_CONFIG_TYPE_WEIGHTS = {DEFAULT_CONFIG_TYPE: 1.0}
 @dataclass
 class Configuration:
     atomic_numbers: np.ndarray
+    node_attrs: np.ndarray  # q, eps, sigma
     positions: Positions  # Angstrom
     energy: Optional[float] = None  # eV
     forces: Optional[Forces] = None  # eV/Angstrom
@@ -142,6 +143,8 @@ def config_from_atoms(
     atomic_numbers = np.array(
         [ase.data.atomic_numbers[symbol] for symbol in atoms.symbols]
     )
+    node_attrs = atoms.arrays.get("node_attrs")
+    assert node_attrs is not None
     pbc = tuple(atoms.get_pbc())
     cell = np.array(atoms.get_cell())
     config_type = atoms.info.get("config_type", "Default")
@@ -174,6 +177,7 @@ def config_from_atoms(
 
     return Configuration(
         atomic_numbers=atomic_numbers,
+        node_attrs=node_attrs,
         positions=atoms.get_positions(),
         energy=energy,
         forces=forces,
@@ -389,6 +393,7 @@ def save_configurations_as_HDF5(configurations: Configurations, _, h5_file) -> N
         subgroup_name = f"config_{j}"
         subgroup = grp.create_group(subgroup_name)
         subgroup["atomic_numbers"] = write_value(config.atomic_numbers)
+        subgroup["node_attrs"] = write_value(config.node_attrs)
         subgroup["positions"] = write_value(config.positions)
         subgroup["energy"] = write_value(config.energy)
         subgroup["forces"] = write_value(config.forces)

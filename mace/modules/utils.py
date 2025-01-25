@@ -255,8 +255,6 @@ def compute_mean_std_atomic_inter_energy(
     data_loader: torch.utils.data.DataLoader,
     atomic_energies: np.ndarray,
 ) -> Tuple[float, float]:
-    atomic_energies_fn = AtomicEnergiesBlock(atomic_energies=atomic_energies)
-
     avg_atom_inter_es_list = []
     head_list = []
 
@@ -280,20 +278,6 @@ def compute_mean_std_atomic_inter_energy(
     std = _check_non_zero(std)
 
     return mean, std
-
-
-def _compute_mean_std_atomic_inter_energy(
-    batch: Batch,
-    atomic_energies_fn: AtomicEnergiesBlock,
-) -> Tuple[torch.Tensor, torch.Tensor]:
-    head = batch.head
-    node_e0 = atomic_energies_fn(batch.node_attrs)
-    graph_e0s = scatter_sum(
-        src=node_e0, index=batch.batch, dim=0, dim_size=batch.num_graphs
-    )[torch.arange(batch.num_graphs), head]
-    graph_sizes = batch.ptr[1:] - batch.ptr[:-1]
-    atom_energies = (batch.energy - graph_e0s) / graph_sizes
-    return atom_energies
 
 
 def compute_mean_rms_energy_forces(
@@ -372,38 +356,22 @@ def compute_statistics(
     data_loader: torch.utils.data.DataLoader,
     atomic_energies: np.ndarray,
 ) -> Tuple[float, float, float, float]:
-    atomic_energies_fn = AtomicEnergiesBlock(atomic_energies=atomic_energies)
-
-    atom_energy_list = []
     forces_list = []
     num_neighbors = []
-    head_list = []
     head_batch = []
 
     for batch in data_loader:
         head = batch.head
-        node_e0 = atomic_energies_fn(batch.node_attrs)
-        graph_e0s = scatter_sum(
-            src=node_e0, index=batch.batch, dim=0, dim_size=batch.num_graphs
-        )[torch.arange(batch.num_graphs), head]
-        graph_sizes = batch.ptr[1:] - batch.ptr[:-1]
-        atom_energy_list.append(
-            (batch.energy - graph_e0s) / graph_sizes
-        )  # {[n_graphs], }
         forces_list.append(batch.forces)  # {[n_graphs*n_atoms,3], }
-        head_list.append(head)  # {[n_graphs], }
         head_batch.append(head[batch.batch])
         _, receivers = batch.edge_index
         _, counts = torch.unique(receivers, return_counts=True)
         num_neighbors.append(counts)
 
-    atom_energies = torch.cat(atom_energy_list, dim=0)  # [total_n_graphs]
     forces = torch.cat(forces_list, dim=0)  # {[total_n_graphs*n_atoms,3], }
-    head = torch.cat(head_list, dim=0)  # [total_n_graphs]
     head_batch = torch.cat(head_batch, dim=0)  # [total_n_graphs]
 
-    # mean = to_numpy(torch.mean(atom_energies)).item()
-    mean = to_numpy(scatter_mean(src=atom_energies, index=head, dim=0).squeeze(-1))
+    mean = 0.0
     rms = to_numpy(
         torch.sqrt(
             scatter_mean(src=torch.square(forces), index=head_batch, dim=0).mean(-1)

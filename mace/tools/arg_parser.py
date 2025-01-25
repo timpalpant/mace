@@ -311,6 +311,13 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
         required=False,
     )
     parser.add_argument(
+        "--num_node_attrs",
+        help="Number of precomputed node attributes",
+        type=int,
+        default=3,
+        required=False,
+    )
+    parser.add_argument(
         "--mean",
         help="Mean energy per atom of training set",
         type=float,
@@ -847,6 +854,13 @@ def build_preprocess_arg_parser() -> argparse.ArgumentParser:
         help="List of atomic numbers",
         type=str,
         default=None,
+        required=False,
+    )
+    parser.add_argument(
+        "--num_node_attrs",
+        help="Number of precomputed node attributes",
+        type=int,
+        default=3,
         required=False,
     )
     parser.add_argument(
