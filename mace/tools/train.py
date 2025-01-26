@@ -19,6 +19,7 @@ from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
 from torch_ema import ExponentialMovingAverage
 from torchmetrics import Metric
+from tqdm import tqdm
 
 from . import torch_geometric
 from .checkpoint import CheckpointHandler, CheckpointState
@@ -337,7 +338,7 @@ def train_one_epoch(
     rank: Optional[int] = 0,
 ) -> None:
     model_to_train = model if distributed_model is None else distributed_model
-    for batch in data_loader:
+    for batch in tqdm(data_loader):
         _, opt_metrics = take_step(
             model=model_to_train,
             loss_fn=loss_fn,
@@ -405,7 +406,7 @@ def evaluate(
     metrics = MACELoss(loss_fn=loss_fn).to(device)
 
     start_time = time.time()
-    for batch in data_loader:
+    for batch in tqdm(data_loader):
         batch = batch.to(device)
         batch_dict = batch.to_dict()
         output = model(
