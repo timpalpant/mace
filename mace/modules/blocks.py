@@ -485,10 +485,10 @@ class InteractionBlock(torch.nn.Module):
         self.edge_irreps = edge_irreps
         self.cueq_config = cueq_config
         self.oeq_config = oeq_config
-        if self.oeq_config and self.oeq_config.conv_fusion:
-            self.conv_fusion = self.oeq_config.conv_fusion
-        if self.cueq_config and self.cueq_config.conv_fusion:
-            self.conv_fusion = self.cueq_config.conv_fusion
+        self.conv_fusion = bool(
+            (self.cueq_config and self.cueq_config.conv_fusion) or
+            (self.oeq_config and self.oeq_config.conv_fusion)
+        )
         self._setup()
 
     @abstractmethod
@@ -627,8 +627,12 @@ class RealAgnosticInteractionBlock(InteractionBlock):
             tp_weights = tp_weights * cutoff
 
         message = None
-        if hasattr(self, "conv_fusion"):
+        if self.conv_fusion and self.cueq_config is not None:
             message = self.conv_tp(node_feats, edge_attrs, tp_weights, edge_index)
+        elif self.conv_fusion and self.oeq_config is not None:
+            sender = edge_index[0]
+            receiver = edge_index[1]
+            message = self.conv_tp(node_feats, edge_attrs, tp_weights, receiver, sender)
         else:
             mji = self.conv_tp(
                 node_feats[edge_index[0]], edge_attrs, tp_weights
@@ -730,8 +734,12 @@ class RealAgnosticResidualInteractionBlock(InteractionBlock):
         if cutoff is not None:
             tp_weights = tp_weights * cutoff
         message = None
-        if hasattr(self, "conv_fusion"):
+        if self.conv_fusion and self.cueq_config is not None:
             message = self.conv_tp(node_feats, edge_attrs, tp_weights, edge_index)
+        elif self.conv_fusion and self.oeq_config is not None:
+            sender = edge_index[0]
+            receiver = edge_index[1]
+            message = self.conv_tp(node_feats, edge_attrs, tp_weights, receiver, sender)
         else:
             mji = self.conv_tp(
                 node_feats[edge_index[0]], edge_attrs, tp_weights
@@ -849,8 +857,12 @@ class RealAgnosticDensityInteractionBlock(InteractionBlock):
             src=edge_density, index=receiver, dim=0, dim_size=num_nodes
         )  # [n_nodes, 1]
         message = None
-        if hasattr(self, "conv_fusion"):
+        if self.conv_fusion and self.cueq_config is not None:
             message = self.conv_tp(node_feats, edge_attrs, tp_weights, edge_index)
+        elif self.conv_fusion and self.oeq_config is not None:
+            sender = edge_index[0]
+            receiver = edge_index[1]
+            message = self.conv_tp(node_feats, edge_attrs, tp_weights, receiver, sender)
         else:
             mji = self.conv_tp(
                 node_feats[edge_index[0]], edge_attrs, tp_weights
@@ -973,8 +985,12 @@ class RealAgnosticDensityResidualInteractionBlock(InteractionBlock):
         )  # [n_nodes, 1]
 
         message = None
-        if hasattr(self, "conv_fusion"):
+        if self.conv_fusion and self.cueq_config is not None:
             message = self.conv_tp(node_feats, edge_attrs, tp_weights, edge_index)
+        elif self.conv_fusion and self.oeq_config is not None:
+            sender = edge_index[0]
+            receiver = edge_index[1]
+            message = self.conv_tp(node_feats, edge_attrs, tp_weights, receiver, sender)
         else:
             mji = self.conv_tp(
                 node_feats[edge_index[0]], edge_attrs, tp_weights
@@ -1102,8 +1118,12 @@ class RealAgnosticAttResidualInteractionBlock(InteractionBlock):
         if cutoff is not None:
             tp_weights = tp_weights * cutoff
         message = None
-        if hasattr(self, "conv_fusion"):
-            message = self.conv_tp(node_feats_up, edge_attrs, tp_weights, edge_index)
+        if self.conv_fusion and self.cueq_config is not None:
+            message = self.conv_tp(node_feats, edge_attrs, tp_weights, edge_index)
+        elif self.conv_fusion and self.oeq_config is not None:
+            sender = edge_index[0]
+            receiver = edge_index[1]
+            message = self.conv_tp(node_feats, edge_attrs, tp_weights, receiver, sender)
         else:
             mji = self.conv_tp(
                 node_feats_up[edge_index[0]], edge_attrs, tp_weights
@@ -1297,8 +1317,12 @@ class RealAgnosticResidualNonLinearInteractionBlock(InteractionBlock):
             src=edge_density, index=edge_index[1], dim=0, dim_size=num_nodes
         )
 
-        if hasattr(self, "conv_fusion"):
+        if self.conv_fusion and self.cueq_config is not None:
             message = self.conv_tp(node_feats, edge_attrs, tp_weights, edge_index)
+        elif self.conv_fusion and self.oeq_config is not None:
+            sender = edge_index[0]
+            receiver = edge_index[1]
+            message = self.conv_tp(node_feats, edge_attrs, tp_weights, receiver, sender)
         else:
             mji = self.conv_tp(
                 node_feats[edge_index[0]], edge_attrs, tp_weights

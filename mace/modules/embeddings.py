@@ -3,7 +3,6 @@ from typing import Any, Dict, Optional
 import torch
 from torch import nn
 
-
 class GenericJointEmbedding(nn.Module):
     """
     Simple concat‐fusion of any set of node‐ or graph‐level features
@@ -61,6 +60,8 @@ class GenericJointEmbedding(nn.Module):
             feat = features[name]
             if spec["per"] == "graph":
                 feat = feat[batch].unsqueeze(-1)  # now [N_nodes, …]
+            elif len(feat.shape) == 1:
+                feat = feat.unsqueeze(-1)
             if spec["type"] == "categorical":
                 feat = (feat + spec.get("offset", 0)).long().squeeze(-1)  # [N_nodes, 1]
             emb = self.embedders[name](feat)
