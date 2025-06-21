@@ -6,7 +6,7 @@ import torch
 from e3nn import o3
 
 from mace import modules
-from mace.modules.wrapper_ops import CuEquivarianceConfig
+from mace.modules.wrapper_ops import CuEquivarianceConfig, OEQConfig
 from mace.tools.finetuning_utils import load_foundations_elements
 from mace.tools.scripts_utils import extract_config_mace_model
 from mace.tools.torch_tools import dtype_dict
