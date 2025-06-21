@@ -21,6 +21,7 @@ from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
 from torch_ema import ExponentialMovingAverage
 from torchmetrics import Metric
+from tqdm import tqdm
 
 from mace.cli.visualise_train import TrainingPlotter
 
