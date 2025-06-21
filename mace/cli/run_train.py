@@ -24,7 +24,9 @@ import mace
 from mace import data, tools
 from mace.calculators.foundations_models import mace_mp, mace_off
 from mace.cli.convert_cueq_e3nn import run as run_cueq_to_e3nn
+from mace.cli.convert_oeq_e3nn import run as run_oeq_to_e3nn
 from mace.cli.convert_e3nn_cueq import run as run_e3nn_to_cueq
+from mace.cli.convert_e3nn_oeq import run as run_e3nn_to_oeq
 from mace.cli.visualise_train import TrainingPlotter
 from mace.data import KeySpecification, update_keyspec_from_kwargs
 from mace.tools import torch_geometric
@@ -652,6 +654,11 @@ def run(args) -> None:
         logging.info("Converting model to CUEQ for accelerated training")
         assert model.__class__.__name__ in ["MACE", "ScaleShiftMACE"]
         model = run_e3nn_to_cueq(deepcopy(model), device=device)
+    # OEq
+    if args.enable_oeq and not args.only_oeq:
+        logging.info("Converting model to OEQ for accelerated training")
+        assert model.__class__.__name__ in ["MACE", "ScaleShiftMACE"]
+        model = run_e3nn_to_oeq(deepcopy(model), device=device)
     # Optimizer
     param_options = get_params_options(args, model)
     optimizer: torch.optim.Optimizer
@@ -890,6 +897,10 @@ def run(args) -> None:
                 print("RUNING CUEQ TO E3NN")
                 print("swa_eval", swa_eval)
                 model_to_save = run_cueq_to_e3nn(deepcopy(model), device=device)
+            if args.enable_oeq and not args.only_oeq:
+                print("RUNING OEQ TO E3NN")
+                print("swa_eval", swa_eval)
+                model_to_save = run_oeq_to_e3nn(deepcopy(model), device=device)
             if args.save_cpu:
                 model_to_save = model_to_save.to("cpu")
             torch.save(model_to_save, model_path)

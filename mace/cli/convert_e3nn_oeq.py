@@ -30,7 +30,7 @@ def run(
 
     # Add OEQ config
     config["oeq_config"] = OEQConfig(
-        enabled=False, optimize_all=True, conv_fusion="atomic"
+        enabled=True, optimize_all=True, conv_fusion="atomic"
     )
 
     # Create new model with oeq config
