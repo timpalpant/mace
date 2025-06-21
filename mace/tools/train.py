@@ -374,7 +374,7 @@ def train_one_epoch(
         if rank == 0:
             logger.log(opt_metrics)
     else:
-        for batch in data_loader:
+        for batch in tqdm(data_loader):
             _, opt_metrics = take_step(
                 model=model_to_train,
                 loss_fn=loss_fn,
@@ -544,7 +544,7 @@ def evaluate(
     metrics = MACELoss(loss_fn=loss_fn).to(device)
 
     start_time = time.time()
-    for batch in data_loader:
+    for batch in tqdm(data_loader):
         batch = batch.to(device)
         batch_dict = batch.to_dict()
         output = model(
