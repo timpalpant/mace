@@ -1121,6 +1121,29 @@ def build_preprocess_arg_parser() -> argparse.ArgumentParser:
         default=DefaultKeys.CHARGES.value,
     )
     parser.add_argument(
+        "--embedding_specs",
+        help=(
+            "Dict of feature‐spec dictionaries. "
+            "embedding_specs:\n"
+            "  total_spin:\n"
+            "    type: categorical\n"
+            "    per: graph\n"
+            "    num_classes: 101\n"
+            "    emb_dim: 64\n"
+            "  total_charge:\n"
+            "    type: categorical\n"
+            "    per: graph\n"
+            "    num_classes: 201\n"
+            "    emb_dim: 64\n"
+            "  temperature:\n"
+            "    type: continuous\n"
+            "    per: graph\n"
+            "    in_dim: 1\n"
+            "    emb_dim: 32\n"
+        ),
+        default=None,
+    )
+    parser.add_argument(
         "--atomic_numbers",
         help="List of atomic numbers",
         type=str,

@@ -302,6 +302,7 @@ def extract_config_mace_model(model: torch.nn.Module) -> Dict[str, Any]:
             if hasattr(model, "use_last_readout_only")
             else False
         ),
+        "embedding_specs": model.embedding_specs,
         "use_embedding_readout": (hasattr(model, "embedding_readout")),
         "readout_cls": model.readouts[-1].__class__,
         "cueq_config": model.cueq_config if hasattr(model, "cueq_config") else None,

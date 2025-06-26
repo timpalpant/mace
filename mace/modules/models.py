@@ -113,8 +113,8 @@ class MACE(torch.nn.Module):
             cueq_config=cueq_config,
         )
         embedding_size = node_feats_irreps.count(o3.Irrep(0, 1))
+        self.embedding_specs = embedding_specs
         if embedding_specs is not None:
-            self.embedding_specs = embedding_specs
             self.joint_embedding = GenericJointEmbedding(
                 base_dim=embedding_size,
                 embedding_specs=embedding_specs,

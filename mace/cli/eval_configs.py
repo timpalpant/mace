@@ -5,6 +5,7 @@
 ###########################################################################################
 
 import argparse
+import ast
 from typing import Dict
 
 import ase.data
@@ -14,6 +15,7 @@ import torch
 from e3nn import o3
 
 from mace import data
+from mace.data import KeySpecification, update_keyspec_from_kwargs
 from mace.cli.convert_e3nn_cueq import run as run_e3nn_to_cueq
 from mace.modules.utils import extract_invariant
 from mace.tools import torch_geometric, torch_tools, utils
@@ -108,6 +110,29 @@ def parse_args() -> argparse.Namespace:
         required=False,
         default=None,
     )
+    parser.add_argument(
+        "--embedding_specs",
+        help=(
+            "Dict of feature‐spec dictionaries. "
+            "embedding_specs:\n"
+            "  total_spin:\n"
+            "    type: categorical\n"
+            "    per: graph\n"
+            "    num_classes: 101\n"
+            "    emb_dim: 64\n"
+            "  total_charge:\n"
+            "    type: categorical\n"
+            "    per: graph\n"
+            "    num_classes: 201\n"
+            "    emb_dim: 64\n"
+            "  temperature:\n"
+            "    type: continuous\n"
+            "    per: graph\n"
+            "    in_dim: 1\n"
+            "    emb_dim: 32\n"
+        ),
+        default=None,
+    )
     return parser.parse_args()
 
 
@@ -136,6 +161,11 @@ def run(args: argparse.Namespace) -> None:
     torch_tools.set_default_dtype(args.default_dtype)
     device = torch_tools.init_device(args.device)
 
+    key_specification = KeySpecification()
+    if args.embedding_specs:
+        args.embedding_specs = ast.literal_eval(args.embedding_specs)
+        update_keyspec_from_kwargs(key_specification, vars(args))
+
     # Load model
     model = torch.load(f=args.model, map_location=args.device)
     if model.__class__.__name__ != "MACELES" and args.compute_bec:
@@ -155,7 +185,7 @@ def run(args: argparse.Namespace) -> None:
     if args.head is not None:
         for atoms in atoms_list:
             atoms.info["head"] = args.head
-    configs = [data.config_from_atoms(atoms) for atoms in atoms_list]
+    configs = [data.config_from_atoms(atoms, key_specification=key_specification) for atoms in atoms_list]
 
     z_table = utils.AtomicNumberTable([int(z) for z in model.atomic_numbers])
 

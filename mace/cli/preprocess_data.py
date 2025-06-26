@@ -146,6 +146,8 @@ def run(args: argparse.Namespace):
     """
 
     # currently support only command line property_key syntax
+    if args.embedding_specs:
+        args.embedding_specs = ast.literal_eval(args.embedding_specs)
     args.key_specification = KeySpecification()
     update_keyspec_from_kwargs(args.key_specification, vars(args))
 
