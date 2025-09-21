@@ -261,6 +261,13 @@ class MACECalculator(Calculator):
         kwarg_head = kwargs.get("head", None)
         if kwarg_head is not None:
             self.head = kwarg_head
+            if isinstance(self.head, str):
+                if self.head not in self.available_heads:
+                    last_head = self.available_heads[-1]
+                    logging.warning(
+                        f"Head {self.head} not found in available heads {self.available_heads}, defaulting to the last head: {last_head}"
+                    )
+                    self.head = last_head
         elif len(self.available_heads) == 1:
             self.head = self.available_heads[0]
         else:
@@ -307,6 +314,22 @@ class MACECalculator(Calculator):
         for model in self.models:
             for param in model.parameters():
                 param.requires_grad = False
+
+    def check_state(self, atoms, tol: float = 1e-15) -> list:
+        """
+        Check for any system changes since the last calculation.
+
+        Args:
+            atoms (ase.Atoms): The atomic structure to check.
+            tol (float): Tolerance for detecting changes.
+
+        Returns:
+            list: A list of changes detected in the system.
+        """
+        state = super().check_state(atoms, tol=tol)
+        if (not state) and (self.atoms.info != atoms.info):
+            state.append("info")
+        return state
 
     def _create_result_tensors(
         self, model_type: str, num_models: int, num_atoms: int
