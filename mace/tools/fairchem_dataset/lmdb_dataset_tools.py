@@ -849,7 +849,11 @@ class AseAtomsDataset(BaseDataset, ABC):
             return None
         if isinstance(idx, (list, np.ndarray)):
             return np.array([self.get_metadata(attr, i) for i in idx])
-        return len(self.get_atoms(idx))
+
+        db_idx = bisect.bisect(self._idlen_cumulative, idx)
+        local_idx = idx - self._idlen_cumulative[db_idx - 1] if db_idx else idx
+        row = self.get_row_from_db(db_idx, local_idx)
+        return row.natoms
 
 
 class AseDBDataset(AseAtomsDataset):
