@@ -205,14 +205,13 @@ def train(
     valid_loss = valid_loss_head  # consider only the last head for the checkpoint
 
     # variable used for broadcast by rank == 0 if epoch loop is exited early, e.g. patience
-    exit_now = torch.zeros(1, device=device) if distributed else None
+    exit_now = torch.zeros(1, device=device)
     while epoch < max_num_epochs:
         # LR scheduler and SWA update
         if swa is None or epoch < swa.start:
             if epoch > start_epoch:
-                lr_scheduler.step(
-                    metrics=valid_loss
-                )  # Can break if exponential LR, TODO fix that!
+                if lr_scheduler.scheduler == "ExponentialLR":
+                    lr_scheduler.step()
         else:
             if swa_start:
                 logging.info("Changing loss based on Stage Two Weights")
@@ -295,6 +294,10 @@ def train(
                 )
             if log_wandb:
                 wandb.log(wandb_log_dict)
+            if swa is None or epoch < swa.start:
+                if epoch > start_epoch:
+                    if lr_scheduler.scheduler == "ReduceLROnPlateau":
+                        lr_scheduler.step(metrics=valid_loss)
             if rank == 0:
                 if valid_loss >= lowest_loss:
                     patience_counter += 1
@@ -303,13 +306,12 @@ def train(
                             logging.info(
                                 f"Stopping optimization after {patience_counter} epochs without improvement and starting Stage Two"
                             )
-                            epoch = swa.start
+                            epoch = swa.start - 1
                         else:
                             logging.info(
                                 f"Stopping optimization after {patience_counter} epochs without improvement"
                             )
-                            if exit_now is not None:
-                                exit_now.fill_(1)
+                            exit_now.fill_(1)
                     if save_all_checkpoints:
                         param_context = (
                             ema.average_parameters()
@@ -337,10 +339,9 @@ def train(
                         keep_last = False or save_all_checkpoints
         if distributed:
             torch.distributed.barrier()
-        if exit_now is not None:
             torch.distributed.broadcast(exit_now, src=0)
-            if exit_now == 1:
-                break
+        if exit_now.item() == 1:
+            break
 
         epoch += 1
 
