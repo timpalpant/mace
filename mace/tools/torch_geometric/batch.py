@@ -45,7 +45,10 @@ class Batch(Data):
         Will exclude any keys given in :obj:`exclude_keys`."""
 
         keys = list(set(data_list[0].keys) - set(exclude_keys))
-        assert "batch" not in keys and "ptr" not in keys
+        if "batch" in keys:
+            keys.remove("batch")
+        if "ptr" in keys:
+            keys.remove("ptr")
 
         batch = cls()
         for key in data_list[0].__dict__.keys():

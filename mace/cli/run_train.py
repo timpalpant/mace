@@ -34,6 +34,7 @@ from mace.cli.convert_e3nn_oeq import run as run_e3nn_to_oeq
 from mace.cli.convert_oeq_e3nn import run as run_oeq_to_e3nn
 from mace.cli.visualise_train import TrainingPlotter
 from mace.data import KeySpecification, update_keyspec_from_kwargs
+from mace.data.sampler import DynamicBatcher
 from mace.tools import torch_geometric
 from mace.tools.distributed_tools import init_distributed
 from mace.tools.lora_tools import inject_LoRAs
@@ -73,6 +74,22 @@ from mace.tools.scripts_utils import (
 )
 from mace.tools.tables_utils import create_error_table
 from mace.tools.utils import AtomicNumberTable
+
+
+def get_node_counts(dataset) -> List[int]:
+    if isinstance(dataset, list):
+        return [int(d.num_nodes) for d in dataset]
+    if isinstance(dataset, ConcatDataset):
+        counts = []
+        for ds in dataset.datasets:
+            counts.extend(get_node_counts(ds))
+        return counts
+
+    # Fallback for other Dataset types
+    counts = []
+    for i in range(len(dataset)):
+        counts.append(int(dataset[i].num_nodes))
+    return counts
 
 
 def main() -> None:
@@ -639,15 +656,40 @@ def run(args) -> None:
             dataset_size = len(train_sets[head_config.head_name])
         logging.info(f"Head '{head_config.head_name}' training dataset size: {dataset_size}")
 
-        train_loader_head = torch_geometric.dataloader.DataLoader(
-            dataset=train_sets[head_config.head_name],
-            batch_size=args.batch_size,
-            shuffle=True,
-            drop_last=(not args.lbfgs),
-            pin_memory=args.pin_memory,
-            num_workers=args.num_workers,
-            generator=torch.Generator().manual_seed(args.seed),
-        )
+        if args.max_num_nodes is not None or args.max_num_edges is not None:
+            train_sampler_head = torch.utils.data.RandomSampler(
+                train_sets[head_config.head_name]
+            )
+            mode = "nodes" if args.max_num_nodes is not None else "edges"
+            max_batch_value = (
+                args.max_num_nodes
+                if args.max_num_nodes is not None
+                else args.max_num_edges
+            )
+            train_loader_head = torch_geometric.dataloader.DataLoader(
+                dataset=train_sets[head_config.head_name],
+                batch_size=args.batch_size,
+                sampler=train_sampler_head,
+                collate_fn=lambda x: x,
+                pin_memory=args.pin_memory,
+                num_workers=args.num_workers,
+            )
+            train_loader_head = DynamicBatcher(
+                loader=train_loader_head,
+                max_num_nodes=args.max_num_nodes,
+                max_num_edges=args.max_num_edges,
+                num_steps=args.batches_per_epoch,
+            )
+        else:
+            train_loader_head = torch_geometric.dataloader.DataLoader(
+                dataset=train_sets[head_config.head_name],
+                batch_size=args.batch_size,
+                shuffle=True,
+                drop_last=(not args.lbfgs),
+                pin_memory=args.pin_memory,
+                num_workers=args.num_workers,
+                generator=torch.Generator().manual_seed(args.seed),
+            )
         head_config.train_loader = train_loader_head
 
     # concatenate all the trainsets
@@ -674,16 +716,40 @@ def run(args) -> None:
             )
             valid_samplers[head] = valid_sampler
 
-    train_loader = torch_geometric.dataloader.DataLoader(
-        dataset=train_set,
-        batch_size=args.batch_size,
-        sampler=train_sampler,
-        shuffle=(train_sampler is None),
-        drop_last=(train_sampler is None and not args.lbfgs),
-        pin_memory=args.pin_memory,
-        num_workers=args.num_workers,
-        generator=torch.Generator().manual_seed(args.seed),
-    )
+    if args.max_num_nodes is not None or args.max_num_edges is not None:
+        if train_sampler is None:
+            train_sampler = torch.utils.data.RandomSampler(train_set)
+        train_loader = torch_geometric.dataloader.DataLoader(
+            dataset=train_set,
+            batch_size=args.batch_size,
+            sampler=train_sampler,
+            collate_fn=lambda x: x,
+            pin_memory=args.pin_memory,
+            num_workers=args.num_workers,
+        )
+        train_loader = DynamicBatcher(
+            loader=train_loader,
+            max_num_nodes=args.max_num_nodes,
+            max_num_edges=args.max_num_edges,
+            num_steps=args.batches_per_epoch,
+        )
+        if args.distributed and args.batches_per_epoch is None:
+            logging.warning(
+                "Distributed training with dynamic batching and without 'batches_per_epoch' set "
+                "may lead to deadlocks if ranks produce different numbers of batches. "
+                "Please specify '--batches_per_epoch' to ensure consistent batch counts across ranks."
+            )
+    else:
+        train_loader = torch_geometric.dataloader.DataLoader(
+            dataset=train_set,
+            batch_size=args.batch_size,
+            sampler=train_sampler,
+            shuffle=(train_sampler is None),
+            drop_last=(train_sampler is None and not args.lbfgs),
+            pin_memory=args.pin_memory,
+            num_workers=args.num_workers,
+            generator=torch.Generator().manual_seed(args.seed),
+        )
 
     valid_loaders = {heads[i]: None for i in range(len(heads))}
     if not isinstance(valid_sets, dict):
@@ -731,12 +797,19 @@ def run(args) -> None:
 
     logging.info("===========OPTIMIZER INFORMATION===========")
     logging.info(f"Using {args.optimizer.upper()} as parameter optimizer")
-    logging.info(f"Batch size: {args.batch_size}")
+    if args.max_num_nodes is not None:
+        logging.info(f"Max number of nodes per batch: {args.max_num_nodes}")
+    elif args.max_num_edges is not None:
+        logging.info(f"Max number of edges per batch: {args.max_num_edges}")
+    else:
+        logging.info(f"Batch size: {args.batch_size}")
     if args.ema:
         logging.info(f"Using Exponential Moving Average with decay: {args.ema_decay}")
-    logging.info(
-        f"Number of gradient updates: {int(args.max_num_epochs*len(train_set)/args.batch_size)}"
-    )
+    try:
+        num_updates = args.max_num_epochs * len(train_loader)
+        logging.info(f"Number of gradient updates: {num_updates}")
+    except (ValueError, TypeError):
+        logging.info("Number of gradient updates: Unknown")
     logging.info(f"Learning rate: {args.lr}, weight decay: {args.weight_decay}")
     logging.info(loss_fn)
 
@@ -754,7 +827,7 @@ def run(args) -> None:
     if args.enable_oeq:
         logging.info("Converting model to OEQ for accelerated training")
         assert model.__class__.__name__ in ["MACE", "ScaleShiftMACE", "MACELES"]
-        model = run_e3nn_to_oeq(deepcopy(model), device=device)
+        model = run_e3nn_to_oeq(model, device=device)
 
     # Optimizer
     param_options = get_params_options(args, model)

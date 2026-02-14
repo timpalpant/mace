@@ -72,7 +72,10 @@ class DataLoader(torch.utils.data.DataLoader):
         **kwargs,
     ):
         if "collate_fn" in kwargs:
+            collate_fn = kwargs["collate_fn"]
             del kwargs["collate_fn"]
+        else:
+            collate_fn = Collater(follow_batch, exclude_keys)
 
         # Save for PyTorch Lightning < 1.6:
         self.follow_batch = follow_batch
@@ -82,6 +85,6 @@ class DataLoader(torch.utils.data.DataLoader):
             dataset,
             batch_size,
             shuffle,
-            collate_fn=Collater(follow_batch, exclude_keys),
+            collate_fn=collate_fn,
             **kwargs,
         )
