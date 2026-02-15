@@ -126,6 +126,7 @@ def run(args) -> None:
     logging.debug(f"Configuration: {args}")
 
     tools.set_default_dtype(args.default_dtype)
+    tools.set_tf32(args.tf32)
     device = tools.init_device(args.device)
     commit = print_git_commit()
     model_foundation: Optional[torch.nn.Module] = None
@@ -906,6 +907,7 @@ def run(args) -> None:
         plotter=plotter,
         train_sampler=train_sampler,
         rank=rank,
+        use_amp=args.amp,
     )
 
     logging.info("")

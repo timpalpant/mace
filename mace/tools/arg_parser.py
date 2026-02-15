@@ -76,6 +76,18 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
         default="float64",
     )
     parser.add_argument(
+        "--amp",
+        help="Use Automatic Mixed Precision (AMP)",
+        type=str2bool,
+        default=False,
+    )
+    parser.add_argument(
+        "--tf32",
+        help="Use TensorFloat-32 (TF32) on supported GPUs",
+        type=str2bool,
+        default=False,
+    )
+    parser.add_argument(
         "--distributed",
         help="train in multi-GPU data parallel mode",
         action="store_true",

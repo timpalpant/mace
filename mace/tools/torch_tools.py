@@ -84,6 +84,19 @@ def set_default_dtype(dtype: str) -> None:
     torch.set_default_dtype(dtype_dict[dtype])
 
 
+def set_tf32(enable: bool) -> None:
+    if enable:
+        if torch.cuda.is_available():
+            torch.set_float32_matmul_precision("high")
+            logging.info("TF32 enabled")
+        else:
+            logging.warning("TF32 requested but CUDA is not available")
+    else:
+        logging.info("TF32 disabled")
+        torch.backends.cuda.matmul.allow_tf32 = False
+        torch.backends.cudnn.allow_tf32 = False
+
+
 def get_change_of_basis() -> torch.Tensor:
     return CartesianTensor("ij=ji").reduced_tensor_products().change_of_basis
 
