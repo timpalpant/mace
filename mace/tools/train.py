@@ -173,6 +173,7 @@ def train(
     distributed_model: Optional[DistributedDataParallel] = None,
     train_sampler: Optional[DistributedSampler] = None,
     rank: Optional[int] = 0,
+    use_amp: bool = False,
 ):
     lowest_loss = np.inf
     valid_loss = np.inf
@@ -184,6 +185,9 @@ def train(
 
     if max_grad_norm is not None:
         logging.info(f"Using gradient clipping with tolerance={max_grad_norm:.3f}")
+
+    if use_amp:
+        logging.info("Using Automatic Mixed Precision (AMP)")
 
     logging.info("")
     logging.info("===========TRAINING===========")
@@ -243,6 +247,8 @@ def train(
             distributed=distributed,
             distributed_model=distributed_model,
             rank=rank,
+            use_amp=use_amp,
+            batches_per_epoch=batches_per_epoch,
         )
         if distributed:
             torch.distributed.barrier()
@@ -363,10 +369,14 @@ def train_one_epoch(
     distributed: bool,
     distributed_model: Optional[DistributedDataParallel] = None,
     rank: Optional[int] = 0,
+    use_amp: bool = False,
+    batches_per_epoch: Optional[int] = None,
 ) -> None:
     model_to_train = model if distributed_model is None else distributed_model
 
     if isinstance(optimizer, LBFGS):
+        if use_amp:
+            logging.warning("AMP is not supported with LBFGS, disabling AMP")
         _, opt_metrics = take_step_lbfgs(
             model=model_to_train,
             loss_fn=loss_fn,
@@ -394,6 +404,7 @@ def train_one_epoch(
                 output_args=output_args,
                 max_grad_norm=max_grad_norm,
                 device=device,
+                use_amp=use_amp,
             )
             opt_metrics["mode"] = "opt"
             opt_metrics["epoch"] = epoch
@@ -410,6 +421,7 @@ def take_step(
     output_args: Dict[str, bool],
     max_grad_norm: Optional[float],
     device: torch.device,
+    use_amp: bool = False,
 ) -> Tuple[float, Dict[str, Any]]:
     start_time = time.time()
     batch = batch.to(device)
@@ -417,21 +429,25 @@ def take_step(
 
     def closure():
         optimizer.zero_grad(set_to_none=True)
-        output = model(
-            batch_dict,
-            training=True,
-            compute_force=output_args["forces"],
-            compute_virials=output_args["virials"],
-            compute_stress=output_args["stress"],
-        )
-        loss = loss_fn(pred=output, ref=batch)
+        with torch.amp.autocast(device.type, dtype=torch.bfloat16, enabled=use_amp):
+            output = model(
+                batch_dict,
+                training=True,
+                compute_force=output_args["forces"],
+                compute_virials=output_args["virials"],
+                compute_stress=output_args["stress"],
+            )
+            loss = loss_fn(pred=output, ref=batch)
+
         loss.backward()
+
         if max_grad_norm is not None:
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=max_grad_norm)
 
         return loss
 
     loss = closure()
+
     optimizer.step()
 
     if ema is not None:
