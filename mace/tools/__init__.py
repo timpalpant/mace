@@ -12,6 +12,7 @@ from .torch_tools import (
     init_wandb,
     set_default_dtype,
     set_seeds,
+    set_tf32,
     spherical_to_cartesian,
     to_numpy,
     to_one_hot,
