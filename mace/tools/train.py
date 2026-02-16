@@ -174,6 +174,7 @@ def train(
     train_sampler: Optional[DistributedSampler] = None,
     rank: Optional[int] = 0,
     use_amp: bool = False,
+    batches_per_epoch: Optional[int] = None,
 ):
     lowest_loss = np.inf
     valid_loss = np.inf
@@ -191,6 +192,8 @@ def train(
 
     logging.info("")
     logging.info("===========TRAINING===========")
+    if batches_per_epoch is not None:
+        logging.info(f"Limiting to {batches_per_epoch} batches per epoch")
     logging.info("Started training, reporting errors on validation set")
     logging.info("Loss metrics on validation set")
     epoch = start_epoch
@@ -388,13 +391,16 @@ def train_one_epoch(
             device=device,
             distributed=distributed,
             rank=rank,
+            batches_per_epoch=batches_per_epoch,
         )
         opt_metrics["mode"] = "opt"
         opt_metrics["epoch"] = epoch
         if rank == 0:
             logger.log(opt_metrics)
     else:
-        for batch in tqdm(data_loader):
+        for i, batch in enumerate(tqdm(data_loader, total=batches_per_epoch)):
+            if batches_per_epoch is not None and i >= batches_per_epoch:
+                break
             _, opt_metrics = take_step(
                 model=model_to_train,
                 loss_fn=loss_fn,
@@ -472,6 +478,7 @@ def take_step_lbfgs(
     device: torch.device,
     distributed: bool,
     rank: int,
+    batches_per_epoch: Optional[int] = None,
 ) -> Tuple[float, Dict[str, Any]]:
     start_time = time.time()
     logging.debug(
@@ -479,7 +486,9 @@ def take_step_lbfgs(
     )
 
     total_sample_count = 0
-    for batch in data_loader:
+    for i, batch in enumerate(data_loader):
+        if batches_per_epoch is not None and i >= batches_per_epoch:
+            break
         total_sample_count += batch.num_graphs
 
     if distributed:
@@ -504,7 +513,9 @@ def take_step_lbfgs(
         total_loss = torch.tensor(0.0, device=device)
 
         # Process each batch and then collect the results we pass to the optimizer
-        for batch in data_loader:
+        for i, batch in enumerate(data_loader):
+            if batches_per_epoch is not None and i >= batches_per_epoch:
+                break
             batch = batch.to(device)
             batch_dict = batch.to_dict()
             output = model(

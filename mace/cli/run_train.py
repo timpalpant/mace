@@ -908,6 +908,7 @@ def run(args) -> None:
         train_sampler=train_sampler,
         rank=rank,
         use_amp=args.amp,
+        batches_per_epoch=args.batches_per_epoch,
     )
 
     logging.info("")

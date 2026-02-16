@@ -795,6 +795,24 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--batch_size", help="batch size", type=int, default=10)
     parser.add_argument(
+        "--batches_per_epoch",
+        help="Number of batches per epoch, if None it is set to the length of the dataset",
+        type=int,
+        default=None,
+    )
+    parser.add_argument(
+        "--max_num_nodes",
+        help="maximum number of nodes in a batch",
+        type=int,
+        default=None,
+    )
+    parser.add_argument(
+        "--max_num_edges",
+        help="maximum number of edges in a batch",
+        type=int,
+        default=None,
+    )
+    parser.add_argument(
         "--valid_batch_size", help="Validation batch size", type=int, default=10
     )
     parser.add_argument(
