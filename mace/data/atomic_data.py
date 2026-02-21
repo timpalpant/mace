@@ -1,3 +1,4 @@
+import numpy as np
 ###########################################################################################
 # Atomic Data Class for handling molecules as graphs
 # Authors: Ilyes Batatia, Gregor Simm
@@ -149,16 +150,24 @@ class AtomicData(torch_geometric.data.Data):
         z_table: AtomicNumberTable,
         cutoff: float,
         heads: Optional[list] = None,
+        edge_index: Optional[np.ndarray] = None,
+        shifts: Optional[np.ndarray] = None,
+        unit_shifts: Optional[np.ndarray] = None,
         **kwargs,  # pylint: disable=unused-argument
     ) -> "AtomicData":
         if heads is None:
             heads = ["Default"]
-        edge_index, shifts, unit_shifts, cell = get_neighborhood(
-            positions=config.positions,
-            cutoff=cutoff,
-            pbc=deepcopy(config.pbc),
-            cell=deepcopy(config.cell),
-        )
+        if edge_index is None:
+            edge_index, shifts, unit_shifts, cell = get_neighborhood(
+                positions=config.positions,
+                cutoff=cutoff,
+                pbc=deepcopy(config.pbc),
+                cell=deepcopy(config.cell),
+            )
+        else:
+            cell = deepcopy(config.cell)
+            if cell is None or cell.any() == np.zeros((3, 3)).any():
+                cell = np.identity(3, dtype=float)
         indices = atomic_numbers_to_indices(config.atomic_numbers, z_table=z_table)
         one_hot = to_one_hot(
             torch.tensor(indices, dtype=torch.long).unsqueeze(-1),

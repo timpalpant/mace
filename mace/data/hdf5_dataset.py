@@ -1,3 +1,4 @@
+import numpy as np
 from glob import glob
 from typing import List
 
@@ -71,11 +72,18 @@ class HDF5Dataset(Dataset):
         )
         if config.head is None:
             config.head = self.kwargs.get("head")
+        neighborhood_kwargs = {}
+        if "edge_index" in subgrp:
+            neighborhood_kwargs["edge_index"] = subgrp["edge_index"][()]
+            neighborhood_kwargs["shifts"] = subgrp["shifts"][()]
+            neighborhood_kwargs["unit_shifts"] = subgrp["unit_shifts"][()]
+
         atomic_data = self.atomic_dataclass.from_config(
             config,
             z_table=self.z_table,
             cutoff=self.r_max,
             heads=self.kwargs.get("heads", ["Default"]),
+            **neighborhood_kwargs,
             **{k: v for k, v in self.kwargs.items() if k != "heads"},
         )
         return atomic_data
